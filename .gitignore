@@ -1,0 +1,24 @@
+# Local development docs — internal specs, plans, notes
+# These are working documents that change frequently and aren't
+# part of the public project. See .dev/README.md.
+.dev/
+
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Claude Code local
+.claude/settings.local.json

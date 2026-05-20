@@ -1,0 +1,89 @@
+name: Bug report
+description: Report something that doesn't work the way the README says it should.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Please remember that `hintkit` is pre-alpha — there is no released version yet, so most "bugs" against `main` are expected. If you're not sure whether something is a bug or just unfinished work, prefer [Discussions](https://github.com/ahsanjaved001/hintkit/discussions).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concrete description of what went wrong.
+      placeholder: When I typed `git ch`, I expected to see `checkout` suggested, but instead nothing appeared.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Step-by-step instructions to reproduce the issue. Minimal cases are easiest to fix.
+      placeholder: |
+        1. Run `hintkit init zsh` and source the output
+        2. Open a new zsh session
+        3. Type `git ch`
+        4. Observe: no suggestion appears
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: hintkit version
+      description: Output of `hintkit --version` (or commit SHA if built from source).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Shell
+      options:
+        - zsh
+        - bash
+        - other (please describe in additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: shell-version
+    attributes:
+      label: Shell version
+      description: Output of `$SHELL --version`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (arm64)
+        - Other (please describe in additional context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: hintkit doctor output
+      description: If the command exists in your build, paste the output of `hintkit doctor`.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Anything else that might be relevant — terminal emulator, tmux/screen, unusual configuration, etc.
+    validations:
+      required: false

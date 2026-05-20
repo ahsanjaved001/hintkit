@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ahsanjaved001/hintkit/security/advisories/new
+    about: Please report security issues privately via GitHub Security Advisories, not as a public issue. See SECURITY.md.
+  - name: Question or discussion
+    url: https://github.com/ahsanjaved001/hintkit/discussions
+    about: For open-ended questions, ideas, or feedback that isn't a bug or a concrete proposal.

@@ -1,0 +1,37 @@
+name: Completion spec request
+description: Request that suggestions be added for a specific command-line tool.
+labels: ["spec-request", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please read the README's v0.1 scope. The first release deliberately includes only ~30 commands. New specs beyond that set will be considered after v0.1 ships.
+
+        Spec data is ingested from the [`withfig/autocomplete`](https://github.com/withfig/autocomplete) project. If the tool you want isn't covered there yet, the most effective action is usually to contribute the spec upstream — it will then flow into `hintkit` automatically on the next ingest.
+
+  - type: input
+    id: command
+    attributes:
+      label: Command name
+      description: The CLI tool you want suggestions for (e.g., `terraform`, `aws`, `gh`).
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: upstream
+    attributes:
+      label: Upstream check
+      description: Please confirm one of the following.
+      options:
+        - label: A spec for this command already exists in `withfig/autocomplete`, and I am asking that `hintkit` include it in its ingested set.
+        - label: No spec exists upstream, and I have opened (or plan to open) a request or PR there as well.
+    validations:
+      required: true
+
+  - type: textarea
+    id: usage
+    attributes:
+      label: Why this command
+      description: Roughly how often do you (or do you expect users to) reach for this command? This helps prioritize the curated v0.1 set vs. later.
+    validations:
+      required: false
