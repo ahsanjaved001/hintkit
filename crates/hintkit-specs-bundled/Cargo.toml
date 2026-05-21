@@ -1,0 +1,10 @@
+[package]
+name = "hintkit-specs-bundled"
+description = "Bundled compiled .hintkitspec files for hintkit (internal crate)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false

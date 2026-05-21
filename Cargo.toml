@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/hintkit",
+    "crates/hintkit-parser",
+    "crates/hintkit-spec",
+    "crates/hintkit-specs-bundled",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.86"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ahsanjaved001/hintkit"
+homepage = "https://github.com/ahsanjaved001/hintkit"
+authors = ["Ahsan Javed <ahsanjvd001@gmail.com>"]
+
+# Release profile used by cargo-dist. Thin LTO trades a small amount of binary
+# size for much faster link times vs full LTO; sufficient for the 10MB budget.
+[profile.dist]
+inherits = "release"
+lto = "thin"

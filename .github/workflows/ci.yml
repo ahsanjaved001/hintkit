@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. force-push, new PR commits).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  # Cap release binary size per SPEC §3 commitment #5.
+  HINTKIT_BINARY_SIZE_LIMIT_BYTES: "10485760"
+
+jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --workspace -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --workspace
+      - run: cargo test --workspace
+      - name: Enforce binary size budget (<10 MB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=target/release/hintkit
+          if [ ! -f "$binary" ]; then
+            echo "::error::Release binary not found at $binary"
+            exit 1
+          fi
+          size=$(wc -c <"$binary" | tr -d ' ')
+          limit="${HINTKIT_BINARY_SIZE_LIMIT_BYTES}"
+          echo "Release binary size: ${size} bytes (limit ${limit})"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::Release binary exceeds 10 MB budget: ${size} > ${limit}"
+            exit 1
+          fi

@@ -1,0 +1,40 @@
+# dist (cargo-dist) configuration. See https://axodotdev.github.io/cargo-dist
+#
+# Phase 0 status: config is in place but `.github/workflows/release.yml` has
+# NOT yet been generated. Before tagging the first release (even v0.0.0),
+# install cargo-dist locally and run:
+#
+#   cargo install cargo-dist --locked --version 0.31.0
+#   cargo dist generate
+#
+# That writes the canonical release workflow from this config. Tagging
+# v0.x.y without generating the workflow first produces no release.
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+# Pin to the cargo-dist version that generated this config so CI is reproducible.
+cargo-dist-version = "0.31.0"
+# CI backend.
+ci = "github"
+# v0.1 distribution: GitHub Releases + curl|sh only (SPEC §8.1 Tier 1).
+# Homebrew/cargo/AUR/etc. come in v0.2.
+installers = ["shell"]
+# v0.1 platforms (SPEC §3, ROADMAP §5).
+targets = [
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+# On PRs, only run `dist plan` — don't build or upload.
+pr-run-mode = "plan"
+# Releases live on GitHub Releases.
+hosting = "github"
+# `hintkit update` is user-invoked only; no background updater (SPEC §10).
+install-updater = false
+# Build provenance attestations for supply-chain transparency.
+github-attestations = true
+# curl|sh installer drops the binary in $CARGO_HOME/bin (typically ~/.cargo/bin).
+install-path = "CARGO_HOME"
