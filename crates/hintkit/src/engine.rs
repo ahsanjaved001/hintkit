@@ -317,4 +317,142 @@ mod tests {
         let suggestions = compute_suggestions(db, "this-tool-does-not-exist ", 25, &cwd);
         assert!(suggestions.is_empty());
     }
+
+    // ---- Phase 5c gate tests (SPEC §7 Phase 5 "Done when") ------------
+
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    /// A throwaway directory under the system temp dir for one test.
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(prefix: &str) -> Self {
+            let p = std::env::temp_dir().join(format!(
+                "hintkit-engine-{prefix}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&p);
+            std::fs::create_dir_all(&p).expect("create tempdir");
+            Self { path: p }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn run_in(dir: &std::path::Path, prog: &str, args: &[&str]) {
+        let out = Command::new(prog)
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "Test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "Test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .output()
+            .unwrap_or_else(|e| panic!("spawn {prog} {args:?}: {e}"));
+        assert!(
+            out.status.success(),
+            "{prog} {args:?} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// SPEC §7 Phase 5 gate, half 1: typing `git checkout ` in a git
+    /// repo produces a list of local branches as suggestions, and
+    /// the engine returns them within 250 ms p99.
+    #[test]
+    fn git_checkout_lists_local_branches_within_250ms() {
+        // git must be on PATH for this test (it almost certainly is,
+        // but skip cleanly if not so CI on minimal Linux images
+        // doesn't false-fail).
+        if Command::new("git").arg("--version").output().is_err() {
+            eprintln!("skipping git_checkout test: git not installed");
+            return;
+        }
+
+        let tmp = TempDir::new("git_checkout");
+        run_in(&tmp.path, "git", &["init", "-q", "-b", "main"]);
+        run_in(
+            &tmp.path,
+            "git",
+            &["commit", "--allow-empty", "-q", "-m", "init"],
+        );
+        run_in(&tmp.path, "git", &["branch", "feature/foo"]);
+        run_in(&tmp.path, "git", &["branch", "feature/bar"]);
+        run_in(&tmp.path, "git", &["branch", "release/v0"]);
+
+        let db = SpecDb::global();
+        let line = "git checkout ";
+        let cursor = line.len();
+
+        // First call may warm caches; do it once before measuring.
+        let suggestions = compute_suggestions(db, line, cursor, &tmp.path);
+        let names: Vec<&str> = suggestions.iter().map(|s| s.text.as_str()).collect();
+        assert!(
+            names.contains(&"feature/foo"),
+            "expected feature/foo branch; got {names:?}"
+        );
+        assert!(
+            names.contains(&"feature/bar"),
+            "expected feature/bar branch; got {names:?}"
+        );
+        assert!(
+            names.contains(&"main"),
+            "expected main branch; got {names:?}"
+        );
+
+        // Latency gate: 50 iterations, p99 (i.e. the 49th highest) < 250 ms.
+        let mut samples = Vec::with_capacity(50);
+        for _ in 0..50 {
+            let start = Instant::now();
+            let _ = compute_suggestions(db, line, cursor, &tmp.path);
+            samples.push(start.elapsed());
+        }
+        samples.sort();
+        let p99 = samples[(samples.len() * 99) / 100];
+        let p50 = samples[samples.len() / 2];
+        eprintln!("git checkout latency p50={p50:?} p99={p99:?}");
+        assert!(
+            p99 < Duration::from_millis(250),
+            "SPEC §7 Phase 5 perf gate failed: p99={p99:?} (limit 250 ms)"
+        );
+    }
+
+    /// SPEC §7 Phase 5 gate, half 2: typing `npm run ` in a directory
+    /// with `package.json` shows the scripts.
+    #[test]
+    fn npm_run_lists_package_json_scripts() {
+        let tmp = TempDir::new("npm_run");
+        std::fs::write(
+            tmp.path.join("package.json"),
+            r#"{
+              "name": "demo",
+              "scripts": {
+                "build": "tsc",
+                "lint":  "eslint .",
+                "test":  "jest"
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let db = SpecDb::global();
+        let line = "npm run ";
+        let cursor = line.len();
+        let suggestions = compute_suggestions(db, line, cursor, &tmp.path);
+        let names: Vec<&str> = suggestions.iter().map(|s| s.text.as_str()).collect();
+        for expected in ["build", "lint", "test"] {
+            assert!(
+                names.contains(&expected),
+                "expected script `{expected}`; got {names:?}"
+            );
+        }
+    }
 }

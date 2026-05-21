@@ -50,6 +50,31 @@ const TEMPLATE_TO_GENERATOR = {
   folders: "dir_path",
 };
 
+// Fig uses custom JS generators for dynamic completions like "list git
+// branches" or "list package.json scripts" — we drop those at ingest
+// time because we can't safely evaluate arbitrary JS. But the *concept*
+// of "this arg slot completes to local branches" is something our
+// native generators implement, so we re-attach them here by spec name +
+// subcommand + arg index. Manually curated, narrow, auditable.
+//
+// Path format: ["subcommand", "subcommand", …, argIndex] or just
+// [argIndex] for a top-level arg. The last entry is the integer arg
+// index inside the resolved CommandSpec.
+const KNOWN_GENERATOR_BINDINGS = {
+  git: [
+    { path: ["checkout", 0], generator: "git_branches" },
+    { path: ["switch", 0], generator: "git_branches" },
+    { path: ["branch", 0], generator: "git_branches" },
+    { path: ["merge", 0], generator: "git_branches" },
+    { path: ["rebase", 0], generator: "git_branches" },
+  ],
+  npm: [{ path: ["run", 0], generator: "package_json_scripts" }],
+  pnpm: [{ path: ["run", 0], generator: "package_json_scripts" }],
+  bun: [{ path: ["run", 0], generator: "package_json_scripts" }],
+  // yarn invokes scripts as a top-level positional: `yarn <script>`.
+  yarn: [{ path: [0], generator: "package_json_scripts" }],
+};
+
 // Curated v0.1 spec set (SPEC §7 Phase 4 step 4). Mostly the SPEC
 // recommendation verbatim; deviations get a one-line "why" comment
 // next to the entry.
@@ -190,9 +215,41 @@ async function ingestOne(cmd) {
   // aliases first; the SpecDb filename has to match exactly).
   translated.name = cmd;
 
+  applyKnownGeneratorBindings(translated, cmd);
+
   const outPath = path.join(OUTPUT_DIR, `${cmd}.hintkitspec.json`);
   await fs.writeFile(outPath, JSON.stringify(translated, null, 2) + "\n");
   console.log(`  ${cmd} → ${path.relative(process.cwd(), outPath)}`);
+}
+
+function applyKnownGeneratorBindings(spec, cmd) {
+  const bindings = KNOWN_GENERATOR_BINDINGS[cmd];
+  if (!bindings) return;
+  for (const { path: bindingPath, generator } of bindings) {
+    if (!attachGenerator(spec, bindingPath, generator)) {
+      console.warn(
+        `  WARN: ${cmd} binding path ${JSON.stringify(bindingPath)} did not match — upstream spec may have changed`,
+      );
+    }
+  }
+}
+
+/// Walk `spec` along the binding path (subcommand names then a final
+/// arg index), set `.generator` on the arg at the terminus. Returns
+/// `true` if the binding succeeded, `false` if the path didn't resolve.
+function attachGenerator(spec, bindingPath, generator) {
+  let cursor = spec;
+  for (let i = 0; i < bindingPath.length - 1; i++) {
+    const subName = bindingPath[i];
+    if (!cursor.subcommands) return false;
+    const sub = cursor.subcommands.find((s) => s.name === subName);
+    if (!sub) return false;
+    cursor = sub;
+  }
+  const argIndex = bindingPath[bindingPath.length - 1];
+  if (!cursor.args || !cursor.args[argIndex]) return false;
+  cursor.args[argIndex].generator = generator;
+  return true;
 }
 
 async function main() {

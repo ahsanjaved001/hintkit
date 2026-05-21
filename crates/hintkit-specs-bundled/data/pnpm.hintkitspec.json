@@ -817,7 +817,8 @@
       ],
       "args": [
         {
-          "name": "Scripts"
+          "name": "Scripts",
+          "generator": "package_json_scripts"
         }
       ]
     },

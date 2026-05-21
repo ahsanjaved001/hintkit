@@ -59,7 +59,8 @@
       "description": "Run a package.json script or executable",
       "args": [
         {
-          "name": "script"
+          "name": "script",
+          "generator": "package_json_scripts"
         }
       ]
     },

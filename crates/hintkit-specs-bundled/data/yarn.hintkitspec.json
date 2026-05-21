@@ -7211,7 +7211,8 @@
   ],
   "args": [
     {
-      "name": "value"
+      "name": "value",
+      "generator": "package_json_scripts"
     }
   ]
 }

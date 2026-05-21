@@ -238,7 +238,8 @@
       "args": [
         {
           "name": "script",
-          "description": "Script to run from your package.json"
+          "description": "Script to run from your package.json",
+          "generator": "package_json_scripts"
         }
       ]
     },

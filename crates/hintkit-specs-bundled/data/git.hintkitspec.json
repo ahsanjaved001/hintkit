@@ -1268,7 +1268,8 @@
       ],
       "args": [
         {
-          "name": "base"
+          "name": "base",
+          "generator": "git_branches"
         },
         {
           "name": "new base"
@@ -4861,7 +4862,8 @@
       "args": [
         {
           "name": "branch, file, tag or commit",
-          "description": "Branch, file, tag or commit to switch to"
+          "description": "Branch, file, tag or commit to switch to",
+          "generator": "git_branches"
         },
         {
           "name": "pathspec",
@@ -5794,7 +5796,8 @@
       ],
       "args": [
         {
-          "name": "branch"
+          "name": "branch",
+          "generator": "git_branches"
         }
       ]
     },
@@ -6196,7 +6199,8 @@
       "args": [
         {
           "name": "branch name",
-          "description": "Branch or commit to switch to"
+          "description": "Branch or commit to switch to",
+          "generator": "git_branches"
         },
         {
           "name": "start point"
