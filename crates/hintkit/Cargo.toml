@@ -14,3 +14,17 @@ publish = false
 [[bin]]
 name = "hintkit"
 path = "src/main.rs"
+
+[features]
+# `debug` enables `tracing`-based diagnostic logs gated by RUST_LOG. Off in
+# default release builds (SPEC §9 "Never log keystrokes").
+default = []
+debug = []
+
+[dependencies]
+anyhow.workspace = true
+crossterm.workspace = true
+portable-pty.workspace = true
+signal-hook.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

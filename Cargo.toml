@@ -21,3 +21,13 @@ authors = ["Ahsan Javed <ahsanjvd001@gmail.com>"]
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Workspace-shared dependency versions. Member crates reference these via
+# `dep.workspace = true`.
+[workspace.dependencies]
+anyhow = "1"
+crossterm = "0.29"
+portable-pty = "0.9"
+signal-hook = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
