@@ -26,6 +26,7 @@ lto = "thin"
 # `dep.workspace = true`.
 [workspace.dependencies]
 anyhow = "1"
+crossbeam-channel = "0.5"
 crossterm = "0.29"
 portable-pty = "0.9"
 signal-hook = "0.4"
