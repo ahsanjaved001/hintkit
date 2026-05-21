@@ -50,10 +50,51 @@ const TEMPLATE_TO_GENERATOR = {
   folders: "dir_path",
 };
 
-// Curated v0.1 spec set (SPEC §7 Phase 4 step 4 recommends ~30). MVP
-// starts with one to prove the pipeline; the list expands once the
-// translator survives a wider corpus.
-const CURATED = ["make"];
+// Curated v0.1 spec set (SPEC §7 Phase 4 step 4). Mostly the SPEC
+// recommendation verbatim; deviations get a one-line "why" comment
+// next to the entry.
+const CURATED = [
+  // Source control + remote work
+  "git",
+  "gh",
+  "ssh",
+  "scp",
+  // Build tools
+  "make",
+  "just",
+  "cargo",
+  // Package managers / runtimes
+  "npm",
+  "yarn",
+  "pnpm",
+  "bun",
+  "node",
+  "python",
+  "pip",
+  // Network
+  "curl",
+  "wget",
+  // Cloud / infrastructure
+  "docker",
+  "kubectl",
+  "aws",
+  "terraform",
+  // Search / filesystem (replacements + classics)
+  "find",
+  "grep",
+  "rg",
+  "fd",
+  // POSIX file basics
+  "tar",
+  "ls",
+  "cp",
+  "mv",
+  "rm",
+  // `cd` is a shell builtin (no executable) — included anyway since
+  // fig ships a spec and our completion engine still matches the
+  // typed command name, not an on-disk binary.
+  "cd",
+];
 
 class IngestError extends Error {
   constructor(specName, message) {
