@@ -1,25 +1,32 @@
+mod cli;
 mod engine;
 mod input;
+mod output;
 mod pty;
+mod shell_integration;
+mod state;
 
 use std::process::ExitCode;
 
+use clap::Parser;
+
 fn main() -> ExitCode {
     init_tracing();
-    // Phase 1 + 2: PTY wrapper with bracketed-paste-aware input throttling.
-    // No CLI args yet — that lands in Phase 3 (`hintkit init <shell>`) and
-    // Phase 7 (`doctor`, `uninstall`).
+    let cli = cli::Cli::parse();
+    let exit_code = match cli.command {
+        Some(cli::Command::Init { shell }) => cli::run_init(&shell),
+        None => run_wrapper(),
+    };
+    let code = u8::try_from(exit_code).unwrap_or(1);
+    ExitCode::from(code)
+}
+
+fn run_wrapper() -> i32 {
     match pty::run() {
-        Ok(code) => {
-            // Map the wrapped shell's exit code into our own. `ExitCode`
-            // can't represent the full i32 range, so clamp negatives and
-            // out-of-range positives to 1 (POSIX "general failure").
-            let code = u8::try_from(code).unwrap_or(1);
-            ExitCode::from(code)
-        }
+        Ok(code) => code,
         Err(e) => {
             eprintln!("hintkit: {e:#}");
-            ExitCode::from(1)
+            1
         }
     }
 }

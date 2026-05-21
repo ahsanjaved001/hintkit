@@ -23,6 +23,7 @@ debug = []
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
 crossbeam-channel.workspace = true
 crossterm.workspace = true
 portable-pty.workspace = true

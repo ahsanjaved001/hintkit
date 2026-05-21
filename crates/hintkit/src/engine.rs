@@ -20,6 +20,8 @@ use anyhow::Result;
 use crossbeam_channel::{after, select, Receiver, Sender, TrySendError};
 use tracing::{debug, trace};
 
+use crate::state::SharedState;
+
 /// Quiet window before the debouncer emits an [`Event::InputChanged`].
 /// SPEC §4 specifies 30–50 ms; we sit at the low end of that range so
 /// suggestions feel "live" without churning on every keystroke.
@@ -83,15 +85,24 @@ pub fn run_debouncer(tick_rx: Receiver<()>, events_tx: Sender<Event>) -> Result<
     }
 }
 
-/// Phase 2 stub. Receives change events and discards them. Phase 5 will
-/// replace this with parser-driven suggestion lookup. Exists now so the
-/// channel has a real consumer (otherwise `try_send` would always
-/// `Disconnected`-error on the first send).
-pub fn run_suggestion_stub(events_rx: Receiver<Event>) -> Result<()> {
+/// Phase 2 stub, extended in Phase 3 to read the shell-lifecycle state
+/// on each event so the gate-on-AtPrompt pattern is exercised today
+/// (the suggestion stub deliberately doesn't *act* on the state yet —
+/// Phase 5 lands real parsing/spec-lookup work here).
+pub fn run_suggestion_stub(events_rx: Receiver<Event>, state: SharedState) -> Result<()> {
     let mut received: u64 = 0;
     while let Ok(_event) = events_rx.recv() {
         received = received.wrapping_add(1);
-        // Phase 5 will do real parsing/spec-lookup work here.
+        let shell_state = state.current_state();
+        let cwd = state.current_cwd();
+        let last_exit = state.last_exit();
+        trace!(
+            received,
+            ?shell_state,
+            cwd = cwd.as_deref().unwrap_or("<unknown>"),
+            ?last_exit,
+            "suggestion-stub: would compute suggestions here (Phase 5)"
+        );
     }
     debug!(received, "suggestion-stub thread exiting");
     Ok(())

@@ -1,10 +1,10 @@
-//! PTY wrapper orchestration (SPEC §7 Phase 1 + Phase 2).
+//! PTY wrapper orchestration (SPEC §7 Phase 1 + Phase 2 + Phase 3).
 //!
 //! Opens a pseudo-terminal, spawns the user's `$SHELL` on the slave side,
 //! and wires up the I/O thread topology described in SPEC §4:
 //!
 //! ```text
-//!   pty-reader  : master pty  ──▶ host stdout
+//!   pty-reader  : master pty  ──▶ host stdout + OSC parser → SharedState
 //!   stdin-writer: host stdin  ──▶ master pty   (also feeds the debouncer)
 //!   debouncer   : ticks       ──▶ InputChanged (30 ms quiet window)
 //!   suggestion  : InputChanged ──▶ (stub for now; Phase 5 fills it in)
@@ -18,7 +18,7 @@
 //! terminal (SPEC §9 "Do not break the terminal").
 
 use std::env;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::thread;
 
@@ -32,6 +32,8 @@ use tracing::{debug, trace, warn};
 
 use crate::engine::{self, EVENT_CHANNEL_CAPACITY, TICK_CHANNEL_CAPACITY};
 use crate::input;
+use crate::output;
+use crate::state::SharedState;
 
 /// CSI sequence that asks the terminal to enable bracketed-paste mode.
 /// Once enabled, pasted text is wrapped in `ESC [ 200 ~` / `ESC [ 201 ~`.
@@ -66,10 +68,15 @@ pub fn run() -> Result<i32> {
     drop(pair.slave);
 
     let master = pair.master;
-    let mut reader = master
+    let reader = master
         .try_clone_reader()
         .context("cloning pty master reader")?;
     let writer = master.take_writer().context("taking pty master writer")?;
+
+    // Phase 3: shared shell-lifecycle state. Updated by the pty-reader as
+    // it observes OSC 133/7 sequences emitted by the integration script;
+    // unused for gating until Phase 5.
+    let state = SharedState::new();
 
     // Raw mode must be entered AFTER spawn_command + open so any failure
     // above leaves the host terminal cooked. The guard restores cooked
@@ -91,29 +98,17 @@ pub fn run() -> Result<i32> {
         .spawn(move || engine::run_debouncer(tick_rx, event_tx))
         .context("spawning debouncer thread")?;
 
+    let suggestion_state = state.clone();
     let suggestion_thread = thread::Builder::new()
         .name("hintkit-suggestion".into())
-        .spawn(move || engine::run_suggestion_stub(event_rx))
+        .spawn(move || engine::run_suggestion_stub(event_rx, suggestion_state))
         .context("spawning suggestion-stub thread")?;
 
-    // PTY master → host stdout. EOF here means the shell exited.
+    // PTY master → host stdout, with OSC parsing into `state`.
+    let reader_state = state.clone();
     let reader_thread = thread::Builder::new()
         .name("hintkit-pty-reader".into())
-        .spawn(move || -> io::Result<()> {
-            let mut stdout = io::stdout().lock();
-            let mut buf = [0u8; 8192];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => return Ok(()),
-                    Ok(n) => {
-                        stdout.write_all(&buf[..n])?;
-                        stdout.flush()?;
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(e) => return Err(e),
-                }
-            }
-        })
+        .spawn(move || output::run_pty_reader(reader, reader_state))
         .context("spawning pty-reader thread")?;
 
     // Host stdin → PTY master + debouncer-tick channel. Daemonized: the
