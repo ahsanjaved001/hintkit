@@ -12,11 +12,10 @@
 //! allowlisted operation — no spec-supplied strings reach the
 //! command line of a spawned subprocess.
 //!
-//! Phase 5a status: these functions are unused by the running binary
-//! today — the engine still calls the stub suggestion path. Phase 5b
-//! wires `resolve()` into the suggestion thread. The `dead_code`
-//! allow on the next line drops once that wiring lands.
-#![allow(dead_code)]
+//! Phase 5b wires `resolve()` into the suggestion thread; the
+//! individual generator fns are private (only `resolve` is the public
+//! entry point) so they don't trip dead-code complaints at the call
+//! site.
 
 use std::fs;
 use std::io::Read;

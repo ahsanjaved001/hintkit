@@ -254,8 +254,18 @@ pub fn parse_context<'spec>(
             }
             if tok.starts_with('-') {
                 Expecting::Option
-            } else if current.args.get(arg_index).is_some() {
-                Expecting::ArgValue(&current.args[arg_index])
+            } else if !current.subcommands.is_empty() {
+                // Specs that declare subcommands (e.g. `git`, `docker`)
+                // always interpret the next positional token as a
+                // subcommand attempt — even when the spec also has
+                // top-level args. Falling through to ArgValue would
+                // silently mask real subcommand completion. If the
+                // user is typing an unknown subcommand name (e.g. a
+                // shell alias), we'll show no matches; that's better
+                // than showing a misleading "<alias>" placeholder.
+                Expecting::SubcommandOrOption
+            } else if let Some(arg) = current.args.get(arg_index) {
+                Expecting::ArgValue(arg)
             } else {
                 Expecting::SubcommandOrOption
             }
@@ -277,7 +287,11 @@ pub fn parse_context<'spec>(
                     }
                 }
             }
-            if let Some(arg) = current.args.get(arg_index) {
+            if !current.subcommands.is_empty() {
+                // Same reasoning as the InToken branch: prefer
+                // subcommand selection over a top-level positional arg.
+                Expecting::SubcommandOrOption
+            } else if let Some(arg) = current.args.get(arg_index) {
                 Expecting::ArgValue(arg)
             } else {
                 Expecting::SubcommandOrOption

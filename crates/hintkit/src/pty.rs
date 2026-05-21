@@ -111,13 +111,15 @@ pub fn run() -> Result<i32> {
         .spawn(move || output::run_pty_reader(reader, reader_state))
         .context("spawning pty-reader thread")?;
 
-    // Host stdin → PTY master + debouncer-tick channel. Daemonized: the
-    // stdin read blocks indefinitely, so we never join it — the OS
-    // reclaims it on process exit.
+    // Host stdin → PTY master + debouncer-tick channel + line-buffer
+    // snapshots to SharedState. Daemonized: the stdin read blocks
+    // indefinitely, so we never join it — the OS reclaims it on
+    // process exit.
+    let stdin_state = state.clone();
     thread::Builder::new()
         .name("hintkit-stdin-writer".into())
         .spawn(move || {
-            if let Err(e) = input::run_stdin_writer(writer, tick_tx) {
+            if let Err(e) = input::run_stdin_writer(writer, tick_tx, stdin_state) {
                 warn!("stdin-writer thread exited with error: {e:#}");
             }
         })

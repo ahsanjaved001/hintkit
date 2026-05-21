@@ -30,6 +30,11 @@ struct Inner {
     /// Exit code of the most-recently completed command. `None` before
     /// any command has finished.
     last_exit: Option<i32>,
+    /// Current command line as we believe the shell sees it (best-
+    /// effort; see `line_buffer` for the desync model).
+    line: String,
+    /// Cursor byte offset within `line`.
+    line_cursor: usize,
 }
 
 /// Cheaply-cloneable handle to the shared shell-lifecycle state.
@@ -45,6 +50,8 @@ impl SharedState {
                 state: ShellState::PrePrompt,
                 cwd: None,
                 last_exit: None,
+                line: String::new(),
+                line_cursor: 0,
             })),
         }
     }
@@ -61,6 +68,10 @@ impl SharedState {
             .clone()
     }
 
+    /// Most-recently observed shell exit code. Phase 7's `doctor`
+    /// subcommand will surface this; for now it's tracked but not
+    /// rendered.
+    #[allow(dead_code)]
     pub fn last_exit(&self) -> Option<i32> {
         self.inner
             .lock()
@@ -102,6 +113,31 @@ impl SharedState {
     /// OSC 7 — cwd changed.
     pub fn on_cwd(&self, cwd: impl Into<String>) {
         self.inner.lock().expect("mutex poisoned").cwd = Some(cwd.into());
+    }
+
+    /// Snapshot the tracked command line and cursor as the
+    /// suggestion engine should see them.
+    pub fn current_line(&self) -> (String, usize) {
+        let inner = self.inner.lock().expect("mutex poisoned");
+        (inner.line.clone(), inner.line_cursor)
+    }
+
+    /// Push a new (line, cursor) snapshot from the stdin-writer's
+    /// `LineBuffer`. Called after every observed input byte that
+    /// changes line content or cursor position.
+    pub fn on_line_update(&self, line: String, cursor: usize) {
+        let mut inner = self.inner.lock().expect("mutex poisoned");
+        inner.line = line;
+        inner.line_cursor = cursor;
+    }
+
+    /// Called when the integration script signals a new prompt cycle
+    /// (OSC 133 A or C) — the tracked line buffer must reset to
+    /// match the shell's empty readline buffer.
+    pub fn reset_line(&self) {
+        let mut inner = self.inner.lock().expect("mutex poisoned");
+        inner.line.clear();
+        inner.line_cursor = 0;
     }
 }
 
@@ -151,5 +187,15 @@ mod tests {
         assert_eq!(s.current_cwd().as_deref(), Some("/tmp"));
         s.on_cwd("/home/test");
         assert_eq!(s.current_cwd().as_deref(), Some("/home/test"));
+    }
+
+    #[test]
+    fn line_updates_and_resets() {
+        let s = SharedState::new();
+        assert_eq!(s.current_line(), (String::new(), 0));
+        s.on_line_update("git ch".into(), 6);
+        assert_eq!(s.current_line(), ("git ch".to_string(), 6));
+        s.reset_line();
+        assert_eq!(s.current_line(), (String::new(), 0));
     }
 }

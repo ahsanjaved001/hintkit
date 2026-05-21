@@ -228,6 +228,10 @@ pub fn run_pty_reader(mut reader: Box<dyn Read + Send>, state: SharedState) -> i
 fn apply_event(state: &SharedState, event: OscEvent) {
     match event {
         OscEvent::Osc133PromptStart => {
+            // New prompt — the shell's readline buffer is empty;
+            // mirror that in our tracked line so we don't suggest
+            // off stale content.
+            state.reset_line();
             state.on_prompt_start();
             trace!("shell-state: AtPrompt (OSC 133 A)");
         }
@@ -236,6 +240,9 @@ fn apply_event(state: &SharedState, event: OscEvent) {
             trace!("shell-state: command-input marker (OSC 133 B)");
         }
         OscEvent::Osc133CommandStart => {
+            // Command runs — line is no longer "what the user is
+            // editing", it's about to be executed and replaced.
+            state.reset_line();
             state.on_command_start();
             trace!("shell-state: CommandRunning (OSC 133 C)");
         }

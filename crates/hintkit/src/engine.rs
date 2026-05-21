@@ -14,13 +14,22 @@
 //!                              bounded(16, drop-on-full) ──▶ suggestion-stub
 //! ```
 
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Result;
 use crossbeam_channel::{after, select, Receiver, Sender, TrySendError};
+use hintkit_parser::{match_suggestions, parse_context, tokenize, Suggestion, SuggestionKind};
+use hintkit_specs_bundled::SpecDb;
 use tracing::{debug, trace};
 
-use crate::state::SharedState;
+use crate::generators;
+use crate::state::{SharedState, ShellState};
+
+/// Cap on how many suggestions the engine emits per tick. Larger
+/// lists are not useful (the popup will only show ~5 anyway in
+/// Phase 6) and they slow ranking + rendering.
+const MAX_SUGGESTIONS: usize = 16;
 
 /// Quiet window before the debouncer emits an [`Event::InputChanged`].
 /// SPEC §4 specifies 30–50 ms; we sit at the low end of that range so
@@ -85,27 +94,115 @@ pub fn run_debouncer(tick_rx: Receiver<()>, events_tx: Sender<Event>) -> Result<
     }
 }
 
-/// Phase 2 stub, extended in Phase 3 to read the shell-lifecycle state
-/// on each event so the gate-on-AtPrompt pattern is exercised today
-/// (the suggestion stub deliberately doesn't *act* on the state yet —
-/// Phase 5 lands real parsing/spec-lookup work here).
+/// Suggestion thread main loop (Phase 5b wiring).
+///
+/// On each `InputChanged` event:
+/// 1. Skip if the shell isn't `AtPrompt` (no point suggesting while a
+///    command is running or no prompt is on screen).
+/// 2. Snapshot the current line + cursor + cwd from `SharedState`.
+/// 3. Tokenize, look up the first token in the bundled `SpecDb`. No
+///    spec → no suggestions (we don't have anything to match against).
+/// 4. Walk the parse context, get ranked candidates from the matcher.
+/// 5. For any `GeneratedValue(kind)` suggestions, expand via the
+///    native generator allowlist and inline the results in place of
+///    the placeholder. File / dir / git_branches / package_json_scripts
+///    only — anything else from the spec was already filtered out by
+///    the ingest pipeline.
+/// 6. Trace the top N under the `debug` feature. Phase 6 wires this
+///    list to the renderer.
 pub fn run_suggestion_stub(events_rx: Receiver<Event>, state: SharedState) -> Result<()> {
     let mut received: u64 = 0;
+    let db = SpecDb::global();
     while let Ok(_event) = events_rx.recv() {
         received = received.wrapping_add(1);
         let shell_state = state.current_state();
-        let cwd = state.current_cwd();
-        let last_exit = state.last_exit();
+        if shell_state != ShellState::AtPrompt {
+            trace!(
+                ?shell_state,
+                received,
+                "skipping suggestion compute: shell not AtPrompt"
+            );
+            continue;
+        }
+
+        let (line, cursor) = state.current_line();
+        if line.is_empty() {
+            continue;
+        }
+        let cwd = state
+            .current_cwd()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        let suggestions = compute_suggestions(db, &line, cursor, &cwd);
+        if suggestions.is_empty() {
+            continue;
+        }
+        // Phase 5b: visibility-only. Phase 6 hands this list to the
+        // renderer for the on-screen popup.
+        let preview: Vec<String> = suggestions.iter().take(5).map(|s| s.text.clone()).collect();
         trace!(
             received,
-            ?shell_state,
-            cwd = cwd.as_deref().unwrap_or("<unknown>"),
-            ?last_exit,
-            "suggestion-stub: would compute suggestions here (Phase 5)"
+            line = %line,
+            cursor,
+            total = suggestions.len(),
+            preview = ?preview,
+            "suggestions ready (top 5 shown)"
         );
     }
-    debug!(received, "suggestion-stub thread exiting");
+    debug!(received, "suggestion thread exiting");
     Ok(())
+}
+
+/// Pure helper exposed for testing: take a line + cursor + cwd, return
+/// the ranked suggestion list. No side effects beyond reading the
+/// filesystem (for `file_path` etc.) and possibly spawning a 200 ms-
+/// capped subprocess (for `git_branches`).
+pub fn compute_suggestions(
+    db: &SpecDb,
+    line: &str,
+    cursor: usize,
+    cwd: &std::path::Path,
+) -> Vec<Suggestion> {
+    let tokenized = tokenize(line, cursor);
+    let command_name = match tokenized.tokens.first() {
+        Some(t) => t.text,
+        None => return Vec::new(),
+    };
+    let Some(spec) = db.lookup(command_name) else {
+        return Vec::new();
+    };
+    let ctx = parse_context(&tokenized, &spec);
+    let prefix = tokenized.cursor_prefix(line);
+    let raw = match_suggestions(&ctx, prefix);
+
+    // Expand any GeneratedValue placeholders by invoking the native
+    // generators. Capped at MAX_SUGGESTIONS to keep the list usable.
+    let mut out: Vec<Suggestion> = Vec::new();
+    for s in raw {
+        if out.len() >= MAX_SUGGESTIONS {
+            break;
+        }
+        match s.kind {
+            SuggestionKind::GeneratedValue(kind) => {
+                for value in generators::resolve(kind, cwd) {
+                    if !value.starts_with(prefix) {
+                        continue;
+                    }
+                    out.push(Suggestion {
+                        text: value,
+                        description: s.description.clone(),
+                        kind: SuggestionKind::StaticArg,
+                    });
+                    if out.len() >= MAX_SUGGESTIONS {
+                        break;
+                    }
+                }
+            }
+            _ => out.push(s),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -180,5 +277,44 @@ mod tests {
 
         drop(tick_tx);
         handle.join().unwrap().unwrap();
+    }
+
+    /// End-to-end pipeline test against the real bundled `git` spec.
+    /// Proves: line → tokenize → SpecDb lookup → parse_context → match
+    /// produces sensible suggestions for the partial input most
+    /// real-world v0.1 users hit.
+    #[test]
+    fn compute_suggestions_against_bundled_git_spec() {
+        let db = SpecDb::global();
+        let cwd = std::env::temp_dir();
+
+        // `git c` — should suggest subcommands starting with c (checkout,
+        // commit, clone, …).
+        let suggestions = compute_suggestions(db, "git c", 5, &cwd);
+        let names: Vec<&str> = suggestions.iter().map(|s| s.text.as_str()).collect();
+        assert!(
+            names.contains(&"checkout"),
+            "expected `checkout` in suggestions for `git c`, got {names:?}"
+        );
+        assert!(
+            names.contains(&"commit"),
+            "expected `commit` in suggestions for `git c`, got {names:?}"
+        );
+
+        // `git ` (trailing space) — should suggest *all* subcommands.
+        let suggestions = compute_suggestions(db, "git ", 4, &cwd);
+        assert!(
+            suggestions.len() > 10,
+            "git's bundled spec has >10 subcommands; got {} suggestions",
+            suggestions.len()
+        );
+    }
+
+    #[test]
+    fn compute_suggestions_unknown_command_yields_empty() {
+        let db = SpecDb::global();
+        let cwd = std::env::temp_dir();
+        let suggestions = compute_suggestions(db, "this-tool-does-not-exist ", 25, &cwd);
+        assert!(suggestions.is_empty());
     }
 }

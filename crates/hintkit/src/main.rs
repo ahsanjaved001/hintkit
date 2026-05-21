@@ -2,6 +2,7 @@ mod cli;
 mod engine;
 mod generators;
 mod input;
+mod line_buffer;
 mod output;
 mod pty;
 mod shell_integration;

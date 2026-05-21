@@ -15,6 +15,9 @@ use anyhow::{Context, Result};
 use crossbeam_channel::{Sender, TrySendError};
 use tracing::{debug, trace};
 
+use crate::line_buffer::LineBuffer;
+use crate::state::SharedState;
+
 /// Bracketed-paste introducer: `ESC [ 2 0 0 ~`.
 const PASTE_START: &[u8] = b"\x1b[200~";
 /// Bracketed-paste terminator: `ESC [ 2 0 1 ~`.
@@ -119,12 +122,20 @@ impl PasteDetector {
 /// 1. Write every byte to the PTY (always — paste markers go to the shell
 ///    too so its own readline handles them).
 /// 2. Update the paste-detector state on each byte.
-/// 3. If any non-paste activity occurred (normal typing or a paste just
-///    ended), send a single tick to the debouncer. `try_send` on a bounded
-///    capacity-1 channel coalesces bursts naturally.
-pub fn run_stdin_writer(mut writer: Box<dyn Write + Send>, tick_tx: Sender<()>) -> Result<()> {
+/// 3. For non-paste bytes, feed the [`LineBuffer`] and push snapshots to
+///    [`SharedState`] so the suggestion engine can see what the user is
+///    typing.
+/// 4. If any non-paste activity occurred, send a single tick to the
+///    debouncer. `try_send` on a bounded capacity-1 channel coalesces
+///    bursts naturally.
+pub fn run_stdin_writer(
+    mut writer: Box<dyn Write + Send>,
+    tick_tx: Sender<()>,
+    state: SharedState,
+) -> Result<()> {
     let mut stdin = io::stdin().lock();
     let mut detector = PasteDetector::new();
+    let mut line = LineBuffer::new();
     let mut buf = [0u8; 8192];
     let mut dropped_ticks: u64 = 0;
 
@@ -141,17 +152,39 @@ pub fn run_stdin_writer(mut writer: Box<dyn Write + Send>, tick_tx: Sender<()>) 
         writer.flush().context("flushing pty master")?;
 
         let mut tick_needed = false;
+        let mut line_changed = false;
         for &byte in chunk {
             match detector.observe(byte) {
-                DetectorEvent::Normal | DetectorEvent::ExitedPaste => {
+                DetectorEvent::Normal => {
                     tick_needed = true;
+                    if line.observe(byte) {
+                        line_changed = true;
+                    }
+                }
+                DetectorEvent::ExitedPaste => {
+                    tick_needed = true;
+                    // The paste content went straight to the shell; our
+                    // line model lost track of where the cursor sits
+                    // afterward. Reset to avoid producing bad suggestions
+                    // off a desynced buffer.
+                    line.reset();
+                    line_changed = true;
                 }
                 DetectorEvent::EnteredPaste => {
                     debug!("entered paste mode");
                 }
-                DetectorEvent::Paste => {}
+                DetectorEvent::Paste => {
+                    // Don't feed paste bytes into the line model — they
+                    // bypass interactive line-editing semantics.
+                }
             }
         }
+
+        if line_changed {
+            let (snapshot, cursor) = line.snapshot();
+            state.on_line_update(snapshot, cursor);
+        }
+
         if detector.in_paste() {
             // Inside an unterminated paste — never tick.
             continue;
