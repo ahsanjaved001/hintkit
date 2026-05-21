@@ -1,0 +1,14 @@
+{
+  "name": "hintkit-ingest-specs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-time pipeline: convert withfig/autocomplete TS specs into .hintkitspec.json files bundled by crates/hintkit-specs-bundled.",
+  "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "ingest": "node ingest.mjs"
+  },
+  "dependencies": {
+    "@withfig/autocomplete": "*"
+  }
+}
