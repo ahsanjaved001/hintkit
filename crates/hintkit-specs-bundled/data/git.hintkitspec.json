@@ -1,0 +1,102 @@
+{
+  "name": "git",
+  "description": "the stupid content tracker",
+  "subcommands": [
+    {
+      "name": "checkout",
+      "description": "Switch branches or restore working tree files",
+      "options": [
+        {
+          "names": ["-b"],
+          "description": "Create and switch to a new branch",
+          "args": [{"name": "new-branch"}]
+        },
+        {
+          "names": ["-B"],
+          "description": "Create or reset and switch to a branch",
+          "args": [{"name": "new-branch"}]
+        },
+        {
+          "names": ["--force", "-f"],
+          "description": "Throw away local changes when switching branches"
+        }
+      ],
+      "args": [
+        {
+          "name": "branch",
+          "description": "Branch to switch to",
+          "generator": "git_branches"
+        }
+      ]
+    },
+    {
+      "name": "commit",
+      "description": "Record changes to the repository",
+      "options": [
+        {
+          "names": ["--message", "-m"],
+          "description": "Use the given message as the commit message",
+          "args": [{"name": "message"}]
+        },
+        {
+          "names": ["--all", "-a"],
+          "description": "Automatically stage modified and deleted files"
+        },
+        {
+          "names": ["--amend"],
+          "description": "Replace the tip of the current branch by creating a new commit"
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "description": "Show the working tree status",
+      "options": [
+        {
+          "names": ["--short", "-s"],
+          "description": "Give the output in short format"
+        }
+      ]
+    },
+    {
+      "name": "add",
+      "description": "Add file contents to the index",
+      "options": [
+        {"names": ["--all", "-A"], "description": "Add changes from all tracked and untracked files"},
+        {"names": ["--patch", "-p"], "description": "Interactively choose hunks to add"}
+      ],
+      "args": [
+        {
+          "name": "path",
+          "description": "Files to add",
+          "generator": "file_path"
+        }
+      ]
+    },
+    {
+      "name": "push",
+      "description": "Update remote refs along with associated objects",
+      "options": [
+        {"names": ["--force", "-f"], "description": "Force update remote refs"},
+        {"names": ["--dry-run", "-n"], "description": "Do everything except actually send the updates"}
+      ]
+    },
+    {
+      "name": "pull",
+      "description": "Fetch from and integrate with another repository or a local branch",
+      "options": [
+        {"names": ["--rebase"], "description": "Rebase the current branch on top of the upstream branch"}
+      ]
+    }
+  ],
+  "options": [
+    {
+      "names": ["--version"],
+      "description": "Show the git version"
+    },
+    {
+      "names": ["--help", "-h"],
+      "description": "Show help for the git command"
+    }
+  ]
+}
