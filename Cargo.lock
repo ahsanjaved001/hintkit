@@ -260,7 +260,11 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "crossterm",
+ "hintkit-parser",
+ "hintkit-spec",
+ "hintkit-specs-bundled",
  "portable-pty",
+ "serde_json",
  "signal-hook 0.4.4",
  "tracing",
  "tracing-subscriber",
@@ -269,6 +273,9 @@ dependencies = [
 [[package]]
 name = "hintkit-parser"
 version = "0.0.0"
+dependencies = [
+ "hintkit-spec",
+]
 
 [[package]]
 name = "hintkit-spec"

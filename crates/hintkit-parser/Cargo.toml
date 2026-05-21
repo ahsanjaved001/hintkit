@@ -8,3 +8,6 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
+
+[dependencies]
+hintkit-spec = { path = "../hintkit-spec" }

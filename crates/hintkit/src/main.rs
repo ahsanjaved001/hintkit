@@ -1,5 +1,6 @@
 mod cli;
 mod engine;
+mod generators;
 mod input;
 mod output;
 mod pty;
